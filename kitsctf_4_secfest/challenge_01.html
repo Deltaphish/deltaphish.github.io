@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>J.A</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">  </head>
+  <body>
+    <a href="/">home></a>
+    <h3> KITS CTF 4 SECFEST</h3>
+    <h2> Challenge 1</h2>
+    <p> The goal of this challenge is to find the admin password for the login page.</p>
+    <p> Inspecting the login form we see that the function <code>dologin();</code>  is called on login, which seems to handle authentication for the page.
+
+    <p> The function and its helper functions can be found in login.js on the domain</p>
+    <pre>
+        <code>
+function* cycle(it) { while(true) yield* it; }
+
+function* pad(it,l,bv) { for (var v of it) {l--; yield v} while(l-- > 0) yield bv;}
+
+function* zip(...its) {
+    while (true) {
+        var vs=[];
+        for (var it of its) {
+            rv = it.next();
+            if (rv.done) return;
+            vs.push(rv.value);
+        }
+        console.log(vs);
+        yield vs;
+    }
+}
+
+function validatelogin(u,p){
+    const val = [57, 38, 59, 39, 9, 44, 7, 21, 53, 58, 48, 0, 26, 91, 1, 31, 1, 48, 36, 69, 69, 90, 48, 64, 45, 43, 91, 43, 38, 94, 44, 63, 65, 88, 53, 85, 15];
+    if (p.length != val.length) return false;
+    uc = cycle(u);
+    var rv = 0;
+    for (var tpl of zip(cycle(u),pad(p,val.length,'\x00'),pad(val,p.length,0))) {  rv += (tpl[0].charCodeAt(0) ^ tpl[1].charCodeAt(0)) - tpl[2]; }
+    return rv == 0;
+}
+
+function dologin(){
+    var username, password, aut;
+    username = document.getElementById("username").value;
+    password = document.getElementById("pwd").value;
+    aut = (username == "root" && validatelogin(username,password));
+    document.getElementById("alertbox").innerHTML += (aut?
+        '&lt; div id="validlogin" class="alert alert-success alert-dismissible fade newfade" &gt; &lt; svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Success:" &gt; use xlink:href="#check-circle-fill"/&gt;&lt;/svg&gt;Welcome!&lt;button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" &gt;&lt;/button&gt;&lt;/div&gt;':
+        '&lt;div id="invalidlogin" class="alert alert-danger alert-dismissible fade newfade"&gt;&lt;svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Danger:"&gt;&lt;use xlink:href="#exclamation-triangle-fill"/&gt;&lt;/svg&gt;Invalid username or password.&lt;button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"&gt;&lt;/button&gt;&lt;/div&gt;');
+    setTimeout(function(){$(".newfade").addClass("show"); $(".newfade").removeClass("newfade")},1);
+    return false;
+};
+    </code>
+    </pre>
+    <p>
+        The interesting part of <code>dologin()</code> is the boolean <code>username == "root" && validatelogin(username,password)</code> which gives us the admin username and points to <code>validatelogin()</code> as the meat of the validation logic.
+        To better understand the function we can deobfuscate it a bit. Since the password length must be equal to the length of val, the pad functions will have no effect and can be removed.
+        Assuming a password length of val, removing dead code, and relabeling a bit we have the simpler function:
+        <pre>
+            <code>
+function validatelogin(u,p){
+    const val = [57, 38, 59, 39, 9, 44, 7, 21, 53, 58, 48, 0, 26, 91, 1, 31, 1, 48, 36, 69, 69, 90, 48, 64, 45, 43, 91, 43, 38, 94, 44, 63, 65, 88, 53, 85, 15];
+    var rv = 0;
+    for ( user_char, password_char, val_char  of zip(cycle(u),p,val)) {  rv += (user_char ^ password_char) - val_char; }
+    return rv == 0;
+}
+            </code>
+        </pre>
+        From this we can assume that a valid password has the property of
+        <code>username[i%4] ⊕ password[i] = val[i]</code>
+    </p>
+    <p>the xor operation is associative, so we can find the password by evaluating:</p>
+    <code>username[i%4] ⊕ val[i] = username[i%4] ⊕ username[i%4] ⊕ password[i] = password[i] </code>
+
+    <p>This was done in python with the following code:</p>
+
+    <pre>
+        <code>
+import itertools
+
+val = [57, 38, 59, 39, 9, 44, 7, 21, 53, 58, 48, 0, 26, 91, 1, 31, 1, 48, 36, 69, 69, 90, 48, 64, 45, 43, 91, 43, 38, 94, 44, 63, 65, 88, 53, 85, 15]
+
+username = itertools.cycle("root")
+password = []
+for v,u in zip(val, username):
+    password.append(v ^ ord(u))
+    
+"".join(list(map(chr,password)))
+        </code>
+    </pre>
+which leaves us with the flag <code>KITS{ChaGU_th4nks_K175_4_D4_T1CK37Z!}</code>.
+
+  </body>
+</html>
