@@ -16,7 +16,7 @@
 
     <p>
         A hint on the page tells us to try "guest" "guest" as a login, which grants us access to the guest account.
-        Whats strange is that the login seems to be case-insensitive with logins "gUeSt" and "GuEsT" both still resulting in succsefull authentication.
+        Whats strange is that the login seems to be case-insensitive with logins "gUeSt" and "GuEsT" both still resulting in successful authentication.
         Also, adding "\" into the username and password seems to not affect the result (example "gue\st").
     </p>
 
@@ -30,7 +30,7 @@
     <code>username: admin' or '1' = '0 ; passowrd: guest</code> resulted in an unsuccessfull login.
 
     <p> The good news is that we have found an sql-injection vulnerability!
-        The bad news is that since the server only responds in http status codes we can only get yes/no results from our querys.
+        The bad news is that since the server only responds in http status codes we can only get yes/no results from our queries.
         The solution is <a href="https://owasp.org/www-community/attacks/Blind_SQL_Injection">blind sql injection</a> where we
         can extract information via a series of true or false questions.
     </p>
